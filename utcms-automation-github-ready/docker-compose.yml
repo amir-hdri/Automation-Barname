@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  utcms-bot:
+    build: .
+    container_name: utcms-bot
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/bot_stats.db
+    volumes:
+      - ./.auth:/app/.auth
+      - utcms-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  utcms-data:
