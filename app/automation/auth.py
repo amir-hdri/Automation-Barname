@@ -281,6 +281,116 @@ class UTCMSAuthenticator:
             return mode
         return "provider_first"
 
+    async def _fill_credentials(
+        self,
+        username_selector: str,
+        password_selector: str,
+        username: str,
+        password: str,
+    ) -> bool:
+        try:
+            await self.page.fill(username_selector, username)
+            await self.page.fill(password_selector, password)
+            return True
+        except Exception as error:
+            self.last_error = f"تکمیل فرم ورود با خطا مواجه شد: {error}"
+            return False
+
+    async def _handle_captcha(self, captcha_selector: str) -> bool:
+        if not captcha_selector:
+            return True
+
+        if utcms_config.UTCMS_CAPTCHA_VALUE:
+            try:
+                await self.page.fill(captcha_selector, utcms_config.UTCMS_CAPTCHA_VALUE)
+                return True
+            except Exception:
+                self.last_error = "فیلد کپچا یافت شد اما مقداردهی آن انجام نشد."
+                return False
+
+        captcha_mode = self._captcha_mode()
+        allow_provider = captcha_mode in ("provider_first", "provider_only")
+        allow_manual = captcha_mode in ("provider_first", "manual_only") and utcms_config.UTCMS_ENABLE_MANUAL_CAPTCHA
+
+        solved_by_provider = None
+        if allow_provider:
+            solved_by_provider = await self._solve_captcha_with_provider()
+
+        if solved_by_provider:
+            try:
+                await self.page.fill(captcha_selector, solved_by_provider)
+                return True
+            except Exception:
+                self.last_error = "حل کپچا موفق بود اما مقداردهی فیلد کپچا انجام نشد."
+                return False
+
+        if allow_manual:
+            if utcms_config.HEADLESS:
+                self.last_error = (
+                    "کپچا فعال است ولی مرورگر در حالت HEADLESS اجرا می‌شود. "
+                    "برای حل دستی کپچا، `HEADLESS=false` تنظیم شود."
+                )
+                return False
+            solved = await self._wait_for_manual_captcha_input(captcha_selector)
+            if not solved:
+                self.last_error = (
+                    "کپچا در بازه مجاز تکمیل نشد. لطفاً کپچا را دستی وارد کنید و مجدد تلاش کنید."
+                )
+                return False
+            return True
+
+        if captcha_mode == "provider_only":
+            self.last_error = (
+                "کپچا در حالت provider_only حل نشد. "
+                "مقادیر `CAPTCHA_PROVIDER` و `TWOCAPTCHA_API_KEY` را بررسی کنید."
+            )
+        elif captcha_mode == "manual_only":
+            self.last_error = (
+                "حالت manual_only فعال است اما حل دستی کپچا غیرفعال است. "
+                "`UTCMS_ENABLE_MANUAL_CAPTCHA=true` تنظیم شود."
+            )
+        else:
+            self.last_error = (
+                "کپچا در صفحه ورود فعال است. مقدار `UTCMS_CAPTCHA_VALUE` را تنظیم کنید "
+                "یا `TWOCAPTCHA_API_KEY`/`UTCMS_ENABLE_MANUAL_CAPTCHA=true` استفاده شود."
+            )
+        return False
+
+    async def _submit_login(self, submit_selector: str) -> bool:
+        clicked = False
+        try:
+            async with self.page.expect_navigation(timeout=10000, wait_until="domcontentloaded"):
+                await self.page.click(submit_selector)
+            clicked = True
+        except Exception:
+            try:
+                await self.page.click(submit_selector)
+                clicked = True
+            except Exception:
+                clicked = False
+
+        if not clicked:
+            self.last_error = "ارسال فرم ورود انجام نشد."
+            return False
+
+        if await self._wait_for_login_result():
+            post_login_ok = await self._complete_post_login_steps()
+            if not post_login_ok:
+                if not self.last_error:
+                    self.last_error = "تکمیل مراحل پس از لاگین ناموفق بود."
+                return False
+
+            if await self._is_logged_in():
+                return True
+
+            if not self.last_error:
+                self.last_error = await self._extract_login_error() or "لاگین تکمیل نشد و دسترسی به فرم بارنامه تایید نشد."
+            return False
+
+        if not self.last_error:
+            self.last_error = await self._extract_login_error() or "لاگین ناموفق بود؛ صفحه در وضعیت ورود باقی ماند."
+        return False
+
     async def login(self, username: str, password: str) -> bool:
         self.last_error = None
         for login_url in self._candidate_login_urls():
@@ -297,99 +407,15 @@ class UTCMSAuthenticator:
             if not (username_selector and password_selector and submit_selector):
                 continue
 
-            try:
-                await self.page.fill(username_selector, username)
-                await self.page.fill(password_selector, password)
-            except Exception as error:
-                self.last_error = f"تکمیل فرم ورود با خطا مواجه شد: {error}"
+            if not await self._fill_credentials(username_selector, password_selector, username, password):
                 continue
 
             captcha_selector = await self._find_selector(AuthSelectors.CAPTCHA_SELECTORS)
-            if captcha_selector:
-                if utcms_config.UTCMS_CAPTCHA_VALUE:
-                    try:
-                        await self.page.fill(captcha_selector, utcms_config.UTCMS_CAPTCHA_VALUE)
-                    except Exception:
-                        self.last_error = "فیلد کپچا یافت شد اما مقداردهی آن انجام نشد."
-                        return False
-                else:
-                    captcha_mode = self._captcha_mode()
-                    allow_provider = captcha_mode in ("provider_first", "provider_only")
-                    allow_manual = captcha_mode in ("provider_first", "manual_only") and utcms_config.UTCMS_ENABLE_MANUAL_CAPTCHA
+            if captcha_selector and not await self._handle_captcha(captcha_selector):
+                return False
 
-                    solved_by_provider = None
-                    if allow_provider:
-                        solved_by_provider = await self._solve_captcha_with_provider()
-
-                    if solved_by_provider:
-                        try:
-                            await self.page.fill(captcha_selector, solved_by_provider)
-                        except Exception:
-                            self.last_error = "حل کپچا موفق بود اما مقداردهی فیلد کپچا انجام نشد."
-                            return False
-                    elif allow_manual:
-                        if utcms_config.HEADLESS:
-                            self.last_error = (
-                                "کپچا فعال است ولی مرورگر در حالت HEADLESS اجرا می‌شود. "
-                                "برای حل دستی کپچا، `HEADLESS=false` تنظیم شود."
-                            )
-                            return False
-                        solved = await self._wait_for_manual_captcha_input(captcha_selector)
-                        if not solved:
-                            self.last_error = (
-                                "کپچا در بازه مجاز تکمیل نشد. لطفاً کپچا را دستی وارد کنید و مجدد تلاش کنید."
-                            )
-                            return False
-                    else:
-                        if captcha_mode == "provider_only":
-                            self.last_error = (
-                                "کپچا در حالت provider_only حل نشد. "
-                                "مقادیر `CAPTCHA_PROVIDER` و `TWOCAPTCHA_API_KEY` را بررسی کنید."
-                            )
-                        elif captcha_mode == "manual_only":
-                            self.last_error = (
-                                "حالت manual_only فعال است اما حل دستی کپچا غیرفعال است. "
-                                "`UTCMS_ENABLE_MANUAL_CAPTCHA=true` تنظیم شود."
-                            )
-                        else:
-                            self.last_error = (
-                                "کپچا در صفحه ورود فعال است. مقدار `UTCMS_CAPTCHA_VALUE` را تنظیم کنید "
-                                "یا `TWOCAPTCHA_API_KEY`/`UTCMS_ENABLE_MANUAL_CAPTCHA=true` استفاده شود."
-                            )
-                        return False
-
-            clicked = False
-            try:
-                async with self.page.expect_navigation(timeout=10000, wait_until="domcontentloaded"):
-                    await self.page.click(submit_selector)
-                clicked = True
-            except Exception:
-                try:
-                    await self.page.click(submit_selector)
-                    clicked = True
-                except Exception:
-                    clicked = False
-
-            if not clicked:
-                self.last_error = "ارسال فرم ورود انجام نشد."
-                continue
-
-            if await self._wait_for_login_result():
-                post_login_ok = await self._complete_post_login_steps()
-                if not post_login_ok:
-                    if not self.last_error:
-                        self.last_error = "تکمیل مراحل پس از لاگین ناموفق بود."
-                    continue
-
-                if await self._is_logged_in():
-                    return True
-
-                if not self.last_error:
-                    self.last_error = await self._extract_login_error() or "لاگین تکمیل نشد و دسترسی به فرم بارنامه تایید نشد."
-                continue
-
-            if not self.last_error:
-                self.last_error = await self._extract_login_error() or "لاگین ناموفق بود؛ صفحه در وضعیت ورود باقی ماند."
+            if await self._submit_login(submit_selector):
+                return True
 
         if not self.last_error:
             self.last_error = "فرم ورود معتبر در URLهای شناخته‌شده پیدا نشد. مقدار `LOGIN_URL` را تنظیم کنید."
