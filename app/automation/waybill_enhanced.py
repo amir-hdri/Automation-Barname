@@ -13,6 +13,7 @@ from playwright.async_api import Page, BrowserContext
 from app.core.config import utcms_config
 from app.core.exceptions import WaybillError
 from app.core.network import is_retryable_network_error
+from app.core.utils import resolve_maybe_awaitable
 from app.automation.browser import PageInteractor
 from app.automation.map_controller import MapController, GeoCoordinate
 from app.automation.location_selector import LocationSelector, RouteCalculator
@@ -31,19 +32,10 @@ class EnhancedWaybillManager:
         self.location_selector = LocationSelector(page)
         self.route_calculator = RouteCalculator(page)
 
-    async def _resolve_maybe_awaitable(self, value: Any) -> Any:
-        resolved = value
-        for _ in range(3):
-            if inspect.isawaitable(resolved):
-                resolved = await resolved
-                continue
-            break
-        return resolved
-
     async def _current_url(self) -> str:
         raw_url = getattr(self.page, "url", "")
         try:
-            value = await self._resolve_maybe_awaitable(raw_url)
+            value = await resolve_maybe_awaitable(raw_url)
         except Exception:
             return ""
         if value is None:
@@ -53,7 +45,7 @@ class EnhancedWaybillManager:
     async def _safe_page_title(self) -> str:
         try:
             raw_title = await self.page.title()
-            value = await self._resolve_maybe_awaitable(raw_title)
+            value = await resolve_maybe_awaitable(raw_title)
         except Exception:
             value = ""
         if value is None:
@@ -62,7 +54,7 @@ class EnhancedWaybillManager:
 
     async def _as_clean_text(self, value: Any) -> str:
         try:
-            resolved = await self._resolve_maybe_awaitable(value)
+            resolved = await resolve_maybe_awaitable(value)
         except Exception:
             return ""
         if resolved is None:

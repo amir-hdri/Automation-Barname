@@ -11,6 +11,7 @@ from app.automation.captcha import get_captcha_provider
 from app.automation.selectors import AuthSelectors
 from app.core.config import utcms_config
 from app.core.network import is_retryable_network_error
+from app.core.utils import resolve_maybe_awaitable
 
 logger = logging.getLogger(__name__)
 
@@ -23,20 +24,10 @@ class UTCMSAuthenticator:
         self.context = context
         self.last_error: Optional[str] = None
 
-    async def _resolve_maybe_awaitable(self, value):
-        """Resolve values that may be wrapped by AsyncMock/awaitable objects."""
-        resolved = value
-        for _ in range(3):
-            if inspect.isawaitable(resolved):
-                resolved = await resolved
-                continue
-            break
-        return resolved
-
     async def _current_url(self) -> str:
         raw_url = getattr(self.page, "url", "")
         try:
-            url_value = await self._resolve_maybe_awaitable(raw_url)
+            url_value = await resolve_maybe_awaitable(raw_url)
         except Exception:
             return ""
 
@@ -46,7 +37,7 @@ class UTCMSAuthenticator:
 
     async def _as_clean_text(self, value) -> str:
         try:
-            resolved = await self._resolve_maybe_awaitable(value)
+            resolved = await resolve_maybe_awaitable(value)
         except Exception:
             return ""
         if resolved is None:
