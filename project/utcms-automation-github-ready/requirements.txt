@@ -1,0 +1,11 @@
+playwright
+fastapi
+uvicorn
+pydantic
+aiohttp
+pytest
+pytest-asyncio
+httpx
+sqlmodel
+aiosqlite
+PyJWT

@@ -11,6 +11,7 @@ from playwright.async_api import Page, TimeoutError
 
 from app.core.exceptions import MapInteractionError
 from app.automation.script_loader import script_loader
+from app.automation.selectors import MapSelectors
 
 
 @dataclass
@@ -40,18 +41,6 @@ class MapSelection:
 
 class MapController:
     """کنترلر تعامل با نقشه برای انتخاب مبدا و مقصد بارنامه"""
-
-    MAP_CONTAINER_SELECTORS = (
-        "#map",
-        ".map",
-        "#map-container",
-        ".map-container",
-        "[id*='map']",
-        "[class*='map']",
-        ".ol-map",
-        ".leaflet-container",
-        ".gm-style",
-    )
 
     def __init__(self, page: Page):
         self.page = page
@@ -101,7 +90,7 @@ class MapController:
             return 'mapbox'
 
         # بررسی وجود کانتینر نقشه با انتخابگرهای رایج
-        for selector in self.MAP_CONTAINER_SELECTORS:
+        for selector in MapSelectors.CONTAINER_SELECTORS:
             element = await self.page.query_selector(selector)
             if element:
                 self.map_selector = selector
@@ -117,7 +106,7 @@ class MapController:
             selector_candidates.append(preferred_selector)
         if self.map_selector:
             selector_candidates.append(self.map_selector)
-        selector_candidates.extend(self.MAP_CONTAINER_SELECTORS)
+        selector_candidates.extend(MapSelectors.CONTAINER_SELECTORS)
 
         unique_candidates: List[str] = []
         for selector in selector_candidates:

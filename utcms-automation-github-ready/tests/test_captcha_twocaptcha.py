@@ -1,5 +1,5 @@
 from unittest.mock import AsyncMock, patch
-
+import os
 import pytest
 
 from app.automation.captcha.twocaptcha import TwoCaptchaProvider
@@ -7,7 +7,9 @@ from app.automation.captcha.twocaptcha import TwoCaptchaProvider
 
 @pytest.mark.asyncio
 async def test_twocaptcha_success_flow():
-    provider = TwoCaptchaProvider(api_key="key", timeout_seconds=30, poll_seconds=0.1, max_retries=1)
+    # Retrieve API key from environment or use a dummy value for tests
+    api_key = os.getenv("TWOCAPTCHA_API_KEY", "test_key")
+    provider = TwoCaptchaProvider(api_key=api_key, timeout_seconds=30, poll_seconds=0.1, max_retries=1)
 
     with patch.object(provider, "_create_task", AsyncMock(return_value="123")), patch.object(
         provider, "_poll_result", AsyncMock(return_value="abcd")
