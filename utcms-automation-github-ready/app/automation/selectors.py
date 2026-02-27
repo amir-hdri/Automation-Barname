@@ -66,3 +66,19 @@ class LocationSelectors:
         'input[placeholder*="جستجو در نقشه"]',
         'input[placeholder*="Search map"]'
     ]
+
+
+class MapSelectors:
+    """انتخابگرهای مربوط به نقشه"""
+
+    CONTAINER_SELECTORS = (
+        "#map",
+        ".map",
+        "#map-container",
+        ".map-container",
+        "[id*='map']",
+        "[class*='map']",
+        ".ol-map",
+        ".leaflet-container",
+        ".gm-style",
+    )
