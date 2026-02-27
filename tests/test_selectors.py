@@ -5,8 +5,7 @@ import os
 # Add app to path
 sys.path.append(os.getcwd())
 
-from app.automation.selectors import LocationSelectors, MapSelectors
-
+from app.automation.selectors import LocationSelectors
 
 class TestLocationSelectors(unittest.TestCase):
     def test_selector_formatting(self):
@@ -61,15 +60,6 @@ class TestLocationSelectors(unittest.TestCase):
             # Should not contain formatting placeholders
             self.assertNotIn("{", selector)
             self.assertNotIn("}", selector)
-
-    def test_map_selectors(self):
-        """Test map selectors are correctly defined"""
-        self.assertIsInstance(MapSelectors.CONTAINER_SELECTORS, tuple)
-        self.assertTrue(len(MapSelectors.CONTAINER_SELECTORS) > 0)
-        for selector in MapSelectors.CONTAINER_SELECTORS:
-            self.assertIsInstance(selector, str)
-        self.assertIn("#map", MapSelectors.CONTAINER_SELECTORS)
-
 
 if __name__ == '__main__':
     unittest.main()

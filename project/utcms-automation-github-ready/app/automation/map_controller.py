@@ -10,27 +10,24 @@ from playwright.async_api import Page
 
 from app.core.exceptions import MapInteractionError
 from app.automation.script_loader import script_loader
-from app.automation.selectors import MapSelectors
 
 
 @dataclass
 class GeoCoordinate:
     """مختصات جغرافیایی"""
+
     latitude: float
     longitude: float
     address: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "lat": self.latitude,
-            "lng": self.longitude,
-            "address": self.address
-        }
+        return {"lat": self.latitude, "lng": self.longitude, "address": self.address}
 
 
 @dataclass
 class MapSelection:
     """نتیجه انتخاب روی نقشه"""
+
     origin: GeoCoordinate
     destination: GeoCoordinate
     distance_km: Optional[float] = None
@@ -40,6 +37,18 @@ class MapSelection:
 
 class MapController:
     """کنترلر تعامل با نقشه برای انتخاب مبدا و مقصد بارنامه"""
+
+    MAP_CONTAINER_SELECTORS = (
+        "#map",
+        ".map",
+        "#map-container",
+        ".map-container",
+        "[id*='map']",
+        "[class*='map']",
+        ".ol-map",
+        ".leaflet-container",
+        ".gm-style",
+    )
 
     def __init__(self, page: Page):
         self.page = page
@@ -59,8 +68,8 @@ class MapController:
                  typeof google.maps !== 'undefined'
         """)
         if has_google:
-            self.map_type = 'google_maps'
-            return 'google_maps'
+            self.map_type = "google_maps"
+            return "google_maps"
 
         # بررسی وجود OpenLayers
         has_ol = await self.page.evaluate("""
@@ -68,8 +77,8 @@ class MapController:
                  typeof ol.Map !== 'undefined'
         """)
         if has_ol:
-            self.map_type = 'openlayers'
-            return 'openlayers'
+            self.map_type = "openlayers"
+            return "openlayers"
 
         # بررسی وجود Leaflet
         has_leaflet = await self.page.evaluate("""
@@ -77,35 +86,37 @@ class MapController:
                  typeof L.Map !== 'undefined'
         """)
         if has_leaflet:
-            self.map_type = 'leaflet'
-            return 'leaflet'
+            self.map_type = "leaflet"
+            return "leaflet"
 
         # بررسی وجود Mapbox
         has_mapbox = await self.page.evaluate("""
             () => typeof mapboxgl !== 'undefined'
         """)
         if has_mapbox:
-            self.map_type = 'mapbox'
-            return 'mapbox'
+            self.map_type = "mapbox"
+            return "mapbox"
 
         # بررسی وجود کانتینر نقشه با انتخابگرهای رایج
-        for selector in MapSelectors.CONTAINER_SELECTORS:
+        for selector in self.MAP_CONTAINER_SELECTORS:
             element = await self.page.query_selector(selector)
             if element:
                 self.map_selector = selector
                 self.map_type = "unknown_map"
-                return 'unknown_map'
+                return "unknown_map"
 
         return None
 
-    async def _resolve_map_selector(self, preferred_selector: Optional[str] = None) -> Optional[str]:
+    async def _resolve_map_selector(
+        self, preferred_selector: Optional[str] = None
+    ) -> Optional[str]:
         """Resolve a usable map selector with runtime discovery fallback."""
         selector_candidates: List[str] = []
         if preferred_selector:
             selector_candidates.append(preferred_selector)
         if self.map_selector:
             selector_candidates.append(self.map_selector)
-        selector_candidates.extend(MapSelectors.CONTAINER_SELECTORS)
+        selector_candidates.extend(self.MAP_CONTAINER_SELECTORS)
 
         unique_candidates: List[str] = []
         for selector in selector_candidates:
@@ -127,7 +138,7 @@ class MapController:
         self,
         selector: Optional[str],
         location: GeoCoordinate,
-        search_input_selector: Optional[str] = None
+        search_input_selector: Optional[str] = None,
     ) -> bool:
         """
         انتخاب یک مکان روی نقشه
@@ -148,17 +159,17 @@ class MapController:
             if not resolved_selector:
                 return False
 
-            if self.map_type == 'google_maps':
+            if self.map_type == "google_maps":
                 return await self._select_google_maps(
                     location,
                     search_input_selector,
                     resolved_selector,
                 )
-            elif self.map_type == 'openlayers':
+            elif self.map_type == "openlayers":
                 return await self._select_openlayers(resolved_selector, location)
-            elif self.map_type == 'leaflet':
+            elif self.map_type == "leaflet":
                 return await self._select_leaflet(resolved_selector, location)
-            elif self.map_type == 'mapbox':
+            elif self.map_type == "mapbox":
                 return await self._select_mapbox(location, search_input_selector)
             else:
                 # روش جایگزین: تلاش برای کلیک روی نقشه در موقعیت محاسبه شده
@@ -177,13 +188,16 @@ class MapController:
 
         if search_input_selector:
             # استفاده از جعبه جستجو
-            await self.page.fill(search_input_selector, location.address or f"{location.latitude}, {location.longitude}")
+            await self.page.fill(
+                search_input_selector,
+                location.address or f"{location.latitude}, {location.longitude}",
+            )
             await asyncio.sleep(0.5)
-            await self.page.press(search_input_selector, 'Enter')
+            await self.page.press(search_input_selector, "Enter")
             await asyncio.sleep(2)
 
             # کلیک روی اولین پیشنهاد
-            suggestion = await self.page.query_selector('.pac-item:first-child')
+            suggestion = await self.page.query_selector(".pac-item:first-child")
             if suggestion:
                 await suggestion.click()
                 await asyncio.sleep(1)
@@ -191,10 +205,9 @@ class MapController:
 
         # روش جایگزین: استفاده از جاوااسکریپت برای تنظیم مرکز نقشه و قراردادن نشانگر
         script = script_loader.load("google_maps_select")
-        result = await self.page.evaluate(script, {
-            "lat": location.latitude,
-            "lng": location.longitude
-        })
+        result = await self.page.evaluate(
+            script, {"lat": location.latitude, "lng": location.longitude}
+        )
 
         if not result:
             # روش جایگزین: شبیه‌سازی کلیک فیزیکی روی عنصر نقشه
@@ -218,49 +231,32 @@ class MapController:
 
         return False
 
-    async def _select_openlayers(
-        self,
-        selector: str,
-        location: GeoCoordinate
-    ) -> bool:
+    async def _select_openlayers(self, selector: str, location: GeoCoordinate) -> bool:
         """انتخاب مکان روی OpenLayers"""
         script = script_loader.load("openlayers_select")
-        return await self.page.evaluate(script, {
-            "selector": selector,
-            "lat": location.latitude,
-            "lng": location.longitude
-        })
+        return await self.page.evaluate(
+            script,
+            {"selector": selector, "lat": location.latitude, "lng": location.longitude},
+        )
 
-    async def _select_leaflet(
-        self,
-        selector: str,
-        location: GeoCoordinate
-    ) -> bool:
+    async def _select_leaflet(self, selector: str, location: GeoCoordinate) -> bool:
         """انتخاب مکان روی Leaflet"""
         script = script_loader.load("leaflet_select")
-        return await self.page.evaluate(script, {
-            "selector": selector,
-            "lat": location.latitude,
-            "lng": location.longitude
-        })
+        return await self.page.evaluate(
+            script,
+            {"selector": selector, "lat": location.latitude, "lng": location.longitude},
+        )
 
     async def _select_mapbox(
-        self,
-        location: GeoCoordinate,
-        search_input_selector: Optional[str] = None
+        self, location: GeoCoordinate, search_input_selector: Optional[str] = None
     ) -> bool:
         """انتخاب مکان روی Mapbox"""
         script = script_loader.load("mapbox_select")
-        return await self.page.evaluate(script, {
-            "lat": location.latitude,
-            "lng": location.longitude
-        })
+        return await self.page.evaluate(
+            script, {"lat": location.latitude, "lng": location.longitude}
+        )
 
-    async def _select_by_click(
-        self,
-        selector: str,
-        location: GeoCoordinate
-    ) -> bool:
+    async def _select_by_click(self, selector: str, location: GeoCoordinate) -> bool:
         """روش جایگزین: انتخاب با کلیک فیزیکی روی عنصر نقشه"""
 
         map_element = await self.page.query_selector(selector)
@@ -287,7 +283,7 @@ class MapController:
             timeout: حداکثر زمان انتظار به میلی‌ثانیه
         """
         try:
-            if self.map_type == 'google_maps':
+            if self.map_type == "google_maps":
                 await self.page.evaluate(f"""
                     () => new Promise((resolve) => {{
                         const map = document.querySelector('[data-map]') ||
@@ -302,7 +298,7 @@ class MapController:
                         setTimeout(resolve, {timeout});
                     }})
                 """)
-            elif self.map_type == 'openlayers':
+            elif self.map_type == "openlayers":
                 await self.page.evaluate(f"""
                     () => new Promise((resolve) => {{
                         const mapElement = document.querySelector('.ol-map, #map');
@@ -319,7 +315,7 @@ class MapController:
                         setTimeout(resolve, {timeout});
                     }})
                 """)
-            elif self.map_type == 'leaflet':
+            elif self.map_type == "leaflet":
                 await self.page.evaluate(f"""
                     () => new Promise((resolve) => {{
                         const mapElement = document.querySelector('.leaflet-container, #map');
@@ -333,7 +329,7 @@ class MapController:
                         setTimeout(resolve, {timeout});
                     }})
                 """)
-            elif self.map_type == 'mapbox':
+            elif self.map_type == "mapbox":
                 await self.page.evaluate(f"""
                     () => new Promise((resolve) => {{
                         const map = window.map || mapboxgl.getMap();
@@ -380,7 +376,7 @@ class MapController:
         origin: GeoCoordinate,
         destination: GeoCoordinate,
         origin_input_selector: Optional[str] = None,
-        dest_input_selector: Optional[str] = None
+        dest_input_selector: Optional[str] = None,
     ) -> MapSelection:
         """
         تنظیم مبدا و مقصد روی نقشه و دریافت اطلاعات مسیر
@@ -429,16 +425,16 @@ class MapController:
         return MapSelection(
             origin=origin,
             destination=destination,
-            distance_km=route_info.get('distance'),
-            duration_min=route_info.get('duration'),
-            route_polyline=route_info.get('polyline')
+            distance_km=route_info.get("distance"),
+            duration_min=route_info.get("duration"),
+            route_polyline=route_info.get("polyline"),
         )
 
     async def _extract_route_info(self) -> Dict[str, Any]:
         """استخراج اطلاعات مسیر از نقشه"""
 
         # تلاش برای استخراج از Google Maps
-        if self.map_type == 'google_maps':
+        if self.map_type == "google_maps":
             script = script_loader.load("extract_route_info_google")
             return await self.page.evaluate(script)
 
@@ -446,7 +442,9 @@ class MapController:
         script = script_loader.load("extract_route_info_generic")
         return await self.page.evaluate(script)
 
-    async def search_address(self, query: str, input_selector: str) -> List[Dict[str, Any]]:
+    async def search_address(
+        self, query: str, input_selector: str
+    ) -> List[Dict[str, Any]]:
         """
         جستجوی آدرس و بازگرداندن پیشنهادات
 
@@ -472,8 +470,5 @@ class MapController:
         script = script_loader.load("get_map_center")
         result = await self.page.evaluate(script)
         if result:
-            return GeoCoordinate(
-                latitude=result['lat'],
-                longitude=result['lng']
-            )
+            return GeoCoordinate(latitude=result["lat"], longitude=result["lng"])
         return None

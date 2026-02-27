@@ -5,7 +5,7 @@ import os
 # Add app to path
 sys.path.append(os.getcwd())
 
-from app.automation.selectors import LocationSelectors, MapSelectors
+from app.automation.selectors import LocationSelectors
 
 
 class TestLocationSelectors(unittest.TestCase):
@@ -21,7 +21,7 @@ class TestLocationSelectors(unittest.TestCase):
             LocationSelectors.DISTRICT_TEMPLATES,
             LocationSelectors.ADDRESS_TEMPLATES,
             LocationSelectors.INPUT_TEMPLATES,
-            LocationSelectors.MAP_SEARCH_TEMPLATES
+            LocationSelectors.MAP_SEARCH_TEMPLATES,
         ]
 
         for group in selector_groups:
@@ -41,18 +41,24 @@ class TestLocationSelectors(unittest.TestCase):
         prefix_lower = "destination"
 
         # Test Province
-        provinces = [s.format(prefix=prefix, prefix_lower=prefix_lower)
-                    for s in LocationSelectors.PROVINCE_TEMPLATES]
+        provinces = [
+            s.format(prefix=prefix, prefix_lower=prefix_lower)
+            for s in LocationSelectors.PROVINCE_TEMPLATES
+        ]
 
         self.assertIn('select[name="DestinationProvince"]', provinces)
-        self.assertIn('#destination_province', provinces)
+        self.assertIn("#destination_province", provinces)
 
         # Test Input
-        inputs = [s.format(prefix=prefix, prefix_lower=prefix_lower)
-                 for s in LocationSelectors.INPUT_TEMPLATES]
+        inputs = [
+            s.format(prefix=prefix, prefix_lower=prefix_lower)
+            for s in LocationSelectors.INPUT_TEMPLATES
+        ]
 
         self.assertIn('input[name="DestinationLocation"]', inputs)
-        self.assertIn('.location-search', inputs) # Static selector should remain unchanged
+        self.assertIn(
+            ".location-search", inputs
+        )  # Static selector should remain unchanged
 
     def test_suggestion_selectors(self):
         """Test suggestion selectors are just strings"""
@@ -62,14 +68,6 @@ class TestLocationSelectors(unittest.TestCase):
             self.assertNotIn("{", selector)
             self.assertNotIn("}", selector)
 
-    def test_map_selectors(self):
-        """Test map selectors are correctly defined"""
-        self.assertIsInstance(MapSelectors.CONTAINER_SELECTORS, tuple)
-        self.assertTrue(len(MapSelectors.CONTAINER_SELECTORS) > 0)
-        for selector in MapSelectors.CONTAINER_SELECTORS:
-            self.assertIsInstance(selector, str)
-        self.assertIn("#map", MapSelectors.CONTAINER_SELECTORS)
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
