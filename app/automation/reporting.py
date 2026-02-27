@@ -5,7 +5,6 @@ from collections import deque
 from datetime import date
 from typing import Any, Dict, Optional
 
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -125,42 +124,21 @@ class ReportService:
 
     async def get_summary(self) -> Dict[str, Any]:
         async with AsyncSession(engine) as session:
-            statement = select(
-                func.sum(BotStats.total_requests),
-                func.sum(BotStats.successful_waybills),
-                func.sum(BotStats.failed_attempts),
-                func.sum(BotStats.map_google),
-                func.sum(BotStats.map_openlayers),
-                func.sum(BotStats.map_leaflet),
-                func.sum(BotStats.map_mapbox),
-                func.sum(BotStats.map_unknown),
-                func.sum(BotStats.map_none),
-            )
+            statement = select(BotStats)
             result = await session.execute(statement)
-            (
-                total_requests,
-                successful_waybills,
-                failed_attempts,
-                map_google,
-                map_openlayers,
-                map_leaflet,
-                map_mapbox,
-                map_unknown,
-                map_none,
-            ) = result.first()
+            all_stats = result.scalars().all()
 
-            # Handle None if table is empty
-            total_requests = total_requests or 0
-            successful_waybills = successful_waybills or 0
-            failed_attempts = failed_attempts or 0
+            total_requests = sum(s.total_requests for s in all_stats)
+            successful_waybills = sum(s.successful_waybills for s in all_stats)
+            failed_attempts = sum(s.failed_attempts for s in all_stats)
 
             map_usage = {
-                "google_maps": map_google or 0,
-                "openlayers": map_openlayers or 0,
-                "leaflet": map_leaflet or 0,
-                "mapbox": map_mapbox or 0,
-                "unknown": map_unknown or 0,
-                "none": map_none or 0,
+                "google_maps": sum(s.map_google for s in all_stats),
+                "openlayers": sum(s.map_openlayers for s in all_stats),
+                "leaflet": sum(s.map_leaflet for s in all_stats),
+                "mapbox": sum(s.map_mapbox for s in all_stats),
+                "unknown": sum(s.map_unknown for s in all_stats),
+                "none": sum(s.map_none for s in all_stats),
             }
 
             return {
