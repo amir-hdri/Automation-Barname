@@ -4,9 +4,10 @@
 """
 
 import asyncio
+import logging
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
-from playwright.async_api import Page
+from playwright.async_api import Page, TimeoutError
 
 from app.core.exceptions import MapInteractionError
 from app.automation.script_loader import script_loader
@@ -371,9 +372,11 @@ class MapController:
         try:
             # استفاده از wait_for_function برای انتظار شرطی
             await self.page.wait_for_function(script, timeout=timeout)
-        except Exception:
+        except TimeoutError:
             # اگر نتیجه‌ای یافت نشد، ادامه دهید (شاید خطا در محاسبه باشد)
-            pass
+            logging.getLogger(__name__).debug(
+                f"Route calculation elements not found within {timeout}ms"
+            )
 
     async def set_route(
         self,
